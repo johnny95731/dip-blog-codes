@@ -236,13 +236,13 @@ def get_freq_laplacian(
         fft_laplacian = -(freq_y + freq_x)
     elif form == '5-point':
         # The Fourier transform of the 5-point stencil.
-        freq_y = np.cos(2 * torch.pi * freq_y) * 2.0 - 4.0
-        freq_x = np.cos(2 * torch.pi * freq_x) * 2.0
+        freq_y = np.cos(2 * np.pi * freq_y) * 2.0 - 4.0
+        freq_x = np.cos(2 * np.pi * freq_x) * 2.0
         fft_laplacian = freq_y + freq_x
     elif form == '9-point':
         # The Fourier transform of the 9-point stencil
-        freq_y = np.cos(2 * torch.pi * freq_y) * 2.0
-        freq_x = np.cos(2 * torch.pi * freq_x) * 2.0
+        freq_y = np.cos(2 * np.pi * freq_y) * 2.0
+        freq_x = np.cos(2 * np.pi * freq_x) * 2.0
         fft_laplacian = (freq_y + freq_x) + (freq_y * freq_x) - 8.0
     else:
         raise ValueError(

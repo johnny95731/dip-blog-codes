@@ -2,7 +2,6 @@ from math import log
 
 import cv2
 import numpy as np
-import torch
 
 
 # utilities
@@ -59,7 +58,7 @@ def get_gaussian_lowpass(
     else:
         raise TypeError(f'Invalid type of `gamma`: {type(sigma)}')
     if spatial_sigma:
-        _sigma = tuple((1 / (2 * torch.pi * s)) for s in _sigma)
+        _sigma = tuple((1 / (2 * np.pi * s)) for s in _sigma)
 
     freq_y = np.fft.fftfreq(_ksize[0], d=1 / _ksize[0] if d is None else d)
     freq_x = np.fft.rfftfreq(_ksize[1], d=1 / _ksize[1] if d is None else d)

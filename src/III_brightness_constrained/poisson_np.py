@@ -122,9 +122,9 @@ def bri_constrained_poisson(
 
     fft_laplacian = -get_freq_laplacian(gray_f, form='continuous', d=1)
     gray_f *= k * fft_laplacian + lbd2
-    gray_f[0, 0] += mean * (lbd1 * img.shape[-1] * img.shape[-2])
+    gray_f[0, 0] += mean * (lbd1 * img.shape[0] * img.shape[1])
     gray_f /= fft_laplacian + (lbd1 + lbd2)
-    new_gray = np.fft.irfft2(gray_f, s=img.shape[-2:], axes=(0, 1))
+    new_gray = np.fft.irfft2(gray_f, s=img.shape[:2], axes=(0, 1))
     new_gray.clip(0.0, None, out=new_gray)
     new_gray /= gray + 1e-7
     res = img * new_gray

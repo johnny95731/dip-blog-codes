@@ -1,6 +1,8 @@
+#  Faster LIME
+
 The relate posts
 
-1. Faster LIME (中文, HackMD): [Link](https://hackmd.io/@johnny95731/B1-Hb_Cnbx)
-2. Faster LIME (english, HackMD): [Link](https://hackmd.io/@johnny95731/HJQ1cP2p-x)
-3. Faster LIME (中文, Blogger): [Link](https://johnny95731.blogspot.com/2026/05/faster-lime.html)
-3. Faster LIME (english, Blogger): [Link](https://johnny95731.blogspot.com/2026/05/faster-lime-en.html)
+1. HackMD (中文): [Link](https://hackmd.io/@johnny95731/B1-Hb_Cnbx)
+2. HackMD (english): [Link](https://hackmd.io/@johnny95731/HJQ1cP2p-x)
+3. Blogger (中文): [Link](https://johnny95731.blogspot.com/2026/05/faster-lime.html)
+4. Blogger (english): [Link](https://johnny95731.blogspot.com/2026/05/faster-lime-en.html)

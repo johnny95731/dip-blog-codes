@@ -72,27 +72,26 @@ def get_gaussian_lowpass(
 
 # gagc
 def auto_gamma_correction(
-    img: np.ndarray,
+    rgb: np.ndarray,
     target: float = 0.5,
 ):
     """Gamma-correction with the automatically estimated gamma.
 
-    1. Computes `gray = rgb_to_gray(rgb)`
-    2. Computes mean value of `gray`: `mean(gray)`
-    3. Computes `gamma = log(target) / log(mean(gray))`
-    4. Applies gamma correction with the computed gamma in step 3.
+    1. Computes `m = mean(img)`
+    2. Computes `gamma = log(target) / log(m)`
+    3. Applies gamma correction with the computed `gamma` in step 3.
 
     Parameters
     ----------
-    img : np.ndarray
-        An RGB or grayscale image with shape `(H, W, *)`.
+    rgb : np.ndarray
+        An RGB or grayscale image in the range of [0,1] with shape `(H, W, *)`.
     target : float, default=0.5
         Target brightness.
 
     Returns
     -------
     np.ndarray
-        Enhanced image with the same shape as input.
+        Enhanced image in the range of [0,1] with the same shape as input.
 
     References
     ----------
@@ -100,32 +99,41 @@ def auto_gamma_correction(
         of brightness," Advances in Computer Science: an International Journal.
         Vol. 4, Issue 6, No.18 , Nov. 2015.
     """
-    _mean = img.mean()
+    is_int = np.issubdtype(rgb.dtype, np.integer)
+    if is_int:
+        max = 255 if np.issubdtype(rgb.dtype, np.uint8) else rgb.max()
+        rgb = np.divide(rgb, max, dtype=np.float32)
+    _mean = rgb.mean()
     gamma = (log(target) / np.log(_mean)).item()
-    res = cv2.pow(img, gamma)
+    res = cv2.pow(rgb, gamma)
     return res
 
 
 # slagc
 def simple_local_gamma_correction(
     rgb: np.ndarray,
-    sigma_blur: float = 10,
+    sigma_blur: float | None = None,
 ):
     """Adaptive Gamma-correction based on local brightness.
 
     Parameters
     ----------
     rgb : np.ndarray
-        An RGB or grayscale image with shape `(H, W, *)`.
-    sigma_blur : int, default=50
+        An RGB or grayscale image in the range of [0,1] with shape `(H, W, *)`.
+    sigma_blur : float | None, default=None
         The sigma for Gaussian blurring. Higher value means the stronger
         blurrness.
 
     Returns
     -------
     np.ndarray
-        Enhanced image with the same shape as input.
+        Enhanced image in the range of [0,1] with the same shape as input.
     """
+    is_int = np.issubdtype(rgb.dtype, np.integer)
+    if is_int:
+        max = 255 if np.issubdtype(rgb.dtype, np.uint8) else rgb.max()
+        rgb = np.divide(rgb, max, dtype=np.float32)
+
     num_ch = 1 if rgb.ndim == 2 else rgb.shape[2]
     if num_ch == 3:
         gray = rgb.mean(2, keepdims=True)
@@ -133,46 +141,67 @@ def simple_local_gamma_correction(
         gray = rgb
     else:
         raise ValueError(f'`rgb` must be 1 or 3 channel: {num_ch}')
-    #
-    local_mean = cv2.GaussianBlur(gray, (0, 0), sigma_blur, sigma_blur)
-    gamma = log(0.5) / cv2.log(local_mean + 1e-8, dst=local_mean)
-    if num_ch == 3:
-        gamma = gamma[..., None]
+    if sigma_blur is None:
+        k = min(gray.shape[:2])
+        sigma_blur = 0.3 * (k / 2 - 1) + 0.8
+
+    gray = gray + 1e-8
+    gray_f = np.fft.rfft2(gray, axes=(0, 1))
+    lowpass = get_gaussian_lowpass(
+        gray_f,
+        sigma_blur,
+        d=1.0,
+        spatial_sigma=True,
+    )
+    local_mean = gray_f * lowpass
+    local_mean = np.fft.irfft2(local_mean, s=gray.shape[:2], axes=(0, 1))
+    gamma = log(0.5) / np.log(local_mean)
     res = np.pow(rgb, gamma)
     return res
 
 
+# lagc
 def local_gamma_correction(
     rgb: np.ndarray,
     sigma_blur: float = 50,
-    basic_gamma: float = 1.0,
-    gain: float = 1.3,
+    gain: float | None = 1.3,
+    gamma_basic: float | None = 1.0,
+    gamma_min: float | None = None,
+    gamma_max: float | None = None,
+    bri_center: float = 0.5,
 ):
     """Adaptive Gamma-correction based on local brightness.
-
-    1. `gray = rgb_to_gray(rgb)`.
-    2. Computes local mean `local_mean`. We use Gaussian lowpass filter in the
-       frequency domain to appoximate local mean.
-    3. Computes the gamma by `gamma = (local_mean - 0.5) * gain + basic_gamma`.
-    4. Gamma correction `res = rgb.pow(gamma)`
 
     Parameters
     ----------
     rgb : np.ndarray
-        An RGB or grayscale image with shape `(*, C, H, W)`.
+        An RGB or grayscale image in the range of [0,1] with shape `(H, W, *)`.
     sigma_blur : float, default=50
         The sigma for Gaussian blurring. Higher value means the stronger
         blurrness.
-    basic_gamma : float, default=1.0
-        The basic gamma value.
-    gain : float, default=1.3
-        The effect of local mean.
+    gain : float | None, default=1.3
+        The effect of local mean. If `gain` are `None`, the value will be
+        computed from mean.
+    gamma_basic : float | None, default=1.0
+        The basic gamma value. If `basic_gamma` is `None`, the value will be
+        computed from mean.
+    gamma_min : float | None, default=None
+        The minimum of gamma.
+    gamma_max : float | None, default=None
+        The maximum of gamma.
+    bri_center: float, default=0.5
+        Threshold value to determine the pixel is bright or is dark.
 
     Returns
     -------
     np.ndarray
-        Enhanced image with the same shape as input.
+        Enhanced image in the range of [0,1] with the same shape as input.
     """
+    is_int = np.issubdtype(rgb.dtype, np.integer)
+    if is_int:
+        max = 255 if np.issubdtype(rgb.dtype, np.uint8) else rgb.max()
+        rgb = np.divide(rgb, max, dtype=np.float32)
+
     num_ch = 1 if rgb.ndim == 2 else rgb.shape[2]
     if num_ch == 3:
         gray = rgb.mean(2, keepdims=True)
@@ -180,13 +209,32 @@ def local_gamma_correction(
         gray = rgb
     else:
         raise ValueError(f'`rgb` must be 1 or 3 channel: {num_ch}')
+    if gamma_basic is None and gain is None:
+        m = gray.mean()
+        m_log = np.log(m)
+        gamma_basic = log(0.5) / m_log
+        gain = -gamma_basic / (2 * m_log * (m + 1e-8))
+    elif gamma_basic is None:
+        m = gray.mean()
+        m_log = np.log(m)
+        basic_gamma1 = log(0.5) / m_log
+        basic_gamma2 = -gain * (2 * m_log * (m + 1e-8))
+        gamma_basic = (basic_gamma1 + basic_gamma2) / 2
+    elif gain is None:
+        m = gray.mean()
+        m_log = np.log(m)
+        gain = 2 * m * log(0.5) - 4 * gamma_basic * m * m_log
+
     gray = gray + 1e-8
     #
     local_mean = cv2.GaussianBlur(gray, (0, 0), sigma_blur, sigma_blur)
-    # gamma = local_mean * gain + (basic_gamma - 0.5 * gain)
-    gamma = (local_mean * gain) + (basic_gamma - 0.5 * gain)
-    np.clip(gamma, 0.0, None)
-    if num_ch == 3:
+    # gamma = gain * (local_mean - bri_center) + basic_gamma
+    gamma = (local_mean * gain) + (gamma_basic - bri_center * gain)
+
+    if gamma_min is None:
+        gamma_min = 0
+    np.clip(gamma, gamma_min, gamma_max)
+    if rgb.ndim == 3:
         gamma = gamma[..., None]
     res = np.pow(rgb, gamma)
     return res

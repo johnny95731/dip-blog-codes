@@ -105,10 +105,9 @@ def auto_gamma_correction(
 ):
     """Gamma-correction with the automatically estimated gamma.
 
-    1. Computes `gray = rgb_to_gray(rgb)`
-    2. Computes mean value of `gray`: `mean(gray)`
-    3. Computes `gamma = log(target) / log(mean(gray))`
-    4. Applies gamma correction with the computed gamma in step 3.
+    1. Computes `m = mean(img)`
+    2. Computes `gamma = log(target) / log(m)`
+    3. Applies gamma correction with the computed `gamma` in step 3.
 
     Parameters
     ----------
@@ -202,18 +201,17 @@ def local_gamma_correction(
         The sigma for Gaussian blurring. Higher value means the stronger
         blurrness.
     gain : float | None, default=1.3
-        The effect of local mean. If both `basic_gamma` and `gain` are None,
-        the value will be computed from mean. If only `gain` is None, the
-        velue will be 1.3
+        The effect of local mean. If `gain` are `None`, the value will be
+        computed from mean.
     gamma_basic : float | None, default=1.0
         The basic gamma value. If `basic_gamma` is `None`, the value will be
         computed from mean.
     gamma_min : float | None, default=None
-        The basic gamma value. If `basic_gamma` is `None`, the value will be
-        computed from mean.
+        The minimum of gamma.
     gamma_max : float | None, default=None
-        The basic gamma value. If `basic_gamma` is `None`, the value will be
-        computed from mean.
+        The maximum of gamma.
+    bri_center: float, default=0.5
+        Threshold value to determine the pixel is bright or is dark.
 
     Returns
     -------
@@ -257,7 +255,7 @@ def local_gamma_correction(
     )
     local_mean = gray_f.mul_(lowpass)
     local_mean = torch.fft.irfft2(local_mean, s=gray.shape[-2:])
-    # gamma = local_mean * gain + (basic_gamma - 0.5 * gain)
+    # gamma = gain * (local_mean - bri_center) + basic_gamma
     gamma = local_mean.mul_(gain).add_(gamma_basic - bri_center * gain)
 
     if gamma_min is None:

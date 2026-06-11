@@ -361,11 +361,12 @@ def simple_local_gamma_correction5(
     return res
 
 
+# lagc
 def local_gamma_correction2(
     rgb: torch.Tensor,
     sigma_blur: float = 50,
-    basic_gamma: float = 1.0,
     gain: float = 1.3,
+    gamma_basic: float = 1.0,
 ):
     """Adaptive Gamma-correction based on local brightness.
 
@@ -376,10 +377,10 @@ def local_gamma_correction2(
     sigma_blur : float, default=50
         The sigma for Gaussian blurring. Higher value means the stronger
         blurrness.
-    basic_gamma : float, default=1.0
-        The basic gamma value.
     gain : float, default=1.3
         The effect of local mean.
+    gamma_basic : float, default=1.0
+        The basic gamma value.
 
     Returns
     -------
@@ -408,7 +409,7 @@ def local_gamma_correction2(
     local_mean = gray_f.mul_(lowpass)
     local_mean = torch.fft.irfft2(local_mean, s=gray.shape[-2:])
     # gamma = local_mean * gain + (basic_gamma - 0.5 * gain)
-    gamma = local_mean.mul_(gain).add_(basic_gamma - 0.5 * gain)
+    gamma = local_mean.mul_(gain).add_(gamma_basic - 0.5 * gain)
     gamma.relu_()
     gray = gray.pow(gamma - 1)
     res = rgb.mul(gray)
@@ -418,8 +419,8 @@ def local_gamma_correction2(
 def local_gamma_correction3(
     rgb: torch.Tensor,
     sigma_blur: float = 50,
-    basic_gamma: float = 1.0,
     gain: float = 1.3,
+    gamma_basic: float = 1.0,
 ):
     """Adaptive Gamma-correction based on local brightness.
 
@@ -430,10 +431,10 @@ def local_gamma_correction3(
     sigma_blur : float, default=50
         The sigma for Gaussian blurring. Higher value means the stronger
         blurrness.
-    basic_gamma : float, default=1.0
-        The basic gamma value.
     gain : float, default=1.3
         The effect of local mean.
+    gamma_basic : float, default=1.0
+        The basic gamma value.
 
     Returns
     -------
@@ -463,7 +464,7 @@ def local_gamma_correction3(
     local_mean = gray_f.mul_(lowpass)
     local_mean = torch.fft.irfft2(local_mean, s=gray.shape[-2:])
     # gamma = local_mean * gain + (basic_gamma - 0.5 * gain)
-    gamma = local_mean.mul_(gain).add_(basic_gamma - 0.5 * gain)
+    gamma = local_mean.mul_(gain).add_(gamma_basic - 0.5 * gain)
     gamma.relu_()
     gray = gray.pow(gamma)
     if num_ch == 3:

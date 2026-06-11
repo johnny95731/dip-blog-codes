@@ -369,12 +369,6 @@ def local_gamma_correction2(
 ):
     """Adaptive Gamma-correction based on local brightness.
 
-    1. `gray = rgb_to_gray(rgb)`.
-    2. Computes local mean `local_mean`. We use Gaussian lowpass filter in the
-       frequency domain to appoximate local mean.
-    3. Computes the gamma by `gamma = (local_mean - 0.5) * gain + basic_gamma`.
-    4. Gamma correction `res = rgb.pow(gamma)`
-
     Parameters
     ----------
     rgb : torch.Tensor
@@ -428,12 +422,6 @@ def local_gamma_correction3(
     gain: float = 1.3,
 ):
     """Adaptive Gamma-correction based on local brightness.
-
-    1. `gray = rgb_to_gray(rgb)`.
-    2. Computes local mean `local_mean`. We use Gaussian lowpass filter in the
-       frequency domain to appoximate local mean.
-    3. Computes the gamma by `gamma = (local_mean - 0.5) * gain + basic_gamma`.
-    4. Gamma correction `res = rgb.pow(gamma)`
 
     Parameters
     ----------

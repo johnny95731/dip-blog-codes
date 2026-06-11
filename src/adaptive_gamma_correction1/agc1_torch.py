@@ -98,6 +98,65 @@ def get_gaussian_lowpass(
     return kernel2d
 
 
+def rgb_to_yuv(rgb: torch.Tensor) -> torch.Tensor:
+    """Converts an image from RGB space to YUV space.
+
+    The input is assumed to be in the range of [0, 1].
+
+    Parameters
+    ----------
+    rgb : torch.Tensor
+        An RGB imag in the range of [0, 1] with shape `(*, 3, H, W)`.
+
+    Returns
+    -------
+    torch.Tensor
+        An image in YUV space with shape `(*, 3, H, W)`. The range of Y is [0, 1]
+        and the range of U and V are [-0.5, 0.5].
+    """
+    # fmt: off
+    matrix = torch.tensor(
+        [[ 0.299,  0.587,  0.114],
+         [-0.169, -0.331,  0.500],
+         [ 0.500, -0.419, -0.081]],
+        dtype=__default_dtype(rgb),
+        device=rgb.device
+    )
+    # fmt: on
+    yuv = torch.einsum('...oc,...chw->...ohw', matrix, rgb)
+    return yuv
+
+
+def yuv_to_rgb(yuv: torch.Tensor) -> torch.Tensor:
+    """Converts an image from YUV space to RGB space.
+
+    The input is assumed to be in the range of [0, 1] (for Y channel) and
+    [-0.5, 0.5] (for U and V channels). The output will be clip to [0, 1].
+
+    Parameters
+    ----------
+    yuv : torch.Tensor
+        An image in YUV space with shape `(*, 3, H, W)`.
+
+    Returns
+    -------
+    torch.Tensor
+        An RGB image in the range of [0, 1] with the shape `(*, 3, H, W)`.
+    """
+    dtype = yuv.dtype if torch.is_floating_point(yuv) else torch.float32
+    # fmt: off
+    matrix = torch.tensor(
+        [[ 1.0, -0.00093, 1.401687],
+         [ 1.0, -0.3437, -0.71417],
+         [ 1.0,  1.77216, 0.00099]],
+        dtype=dtype,
+        device=yuv.device
+    )
+    # fmt: on
+    rgb = torch.einsum('...oc,...chw->...ohw', matrix, yuv).clip(0.0, 1.0)
+    return rgb
+
+
 # gagc
 def auto_gamma_correction(
     img: torch.Tensor,
@@ -128,7 +187,7 @@ def auto_gamma_correction(
         of brightness," Advances in Computer Science: an International Journal.
         Vol. 4, Issue 6, No.18 , Nov. 2015.
     """
-    _mean = img.mean((-1, -2, -3))
+    _mean = img.mean((-1, -2, -3), keepdim=True)
     gamma = log(target) / _mean.log()
     res = img.pow(gamma)
     return res
@@ -137,7 +196,7 @@ def auto_gamma_correction(
 # slagc
 def simple_local_gamma_correction(
     rgb: torch.Tensor,
-    sigma_blur: float = 10,
+    sigma_blur: float | None = None,
 ):
     """Adaptive Gamma-correction based on local brightness.
 
@@ -161,7 +220,10 @@ def simple_local_gamma_correction(
         gray = rgb
     else:
         raise ValueError(f'`rgb` must be 1 or 3 channel: {num_ch}')
-    #
+    if sigma_blur is None:
+        k = min(gray.shape[-2:])
+        sigma_blur = 0.3 * (k / 2 - 1) + 0.8
+
     dtype = __default_dtype(gray)
     gray_f = torch.fft.rfft2(gray)
     lowpass = get_gaussian_lowpass(
@@ -183,8 +245,11 @@ def simple_local_gamma_correction(
 def local_gamma_correction(
     rgb: torch.Tensor,
     sigma_blur: float = 50,
-    basic_gamma: float = 1.0,
-    gain: float = 1.3,
+    gain: float | None = 1.3,
+    gamma_basic: float | None = 1.0,
+    gamma_min: float | None = None,
+    gamma_max: float | None = None,
+    bri_center: float = 0.5,
 ):
     """Adaptive Gamma-correction based on local brightness.
 
@@ -201,10 +266,19 @@ def local_gamma_correction(
     sigma_blur : float, default=50
         The sigma for Gaussian blurring. Higher value means the stronger
         blurrness.
-    basic_gamma : float, default=1.0
-        The basic gamma value.
-    gain : float, default=1.3
-        The effect of local mean.
+    gain : float | None, default=1.3
+        The effect of local mean. If both `basic_gamma` and `gain` are None,
+        the value will be computed from mean. If only `gain` is None, the
+        velue will be 1.3
+    gamma_basic : float | None, default=1.0
+        The basic gamma value. If `basic_gamma` is `None`, the value will be
+        computed from mean.
+    gamma_min : float | None, default=None
+        The basic gamma value. If `basic_gamma` is `None`, the value will be
+        computed from mean.
+    gamma_max : float | None, default=None
+        The basic gamma value. If `basic_gamma` is `None`, the value will be
+        computed from mean.
 
     Returns
     -------
@@ -218,6 +292,22 @@ def local_gamma_correction(
         gray = rgb
     else:
         raise ValueError(f'`rgb` must be 1 or 3 channel: {num_ch}')
+    if gamma_basic is None and gain is None:
+        m = gray.mean((-1, -2), keepdim=True)
+        m_log = m.log()
+        gamma_basic = log(0.5) / m_log
+        gain = -gamma_basic / (2 * m_log * (m + 1e-8))
+    elif gamma_basic is None:
+        m = gray.mean((-1, -2), keepdim=True)
+        m_log = m.log()
+        basic_gamma1 = log(0.5) / m_log
+        basic_gamma2 = -gain * (2 * m_log * (m + 1e-8))
+        gamma_basic = (basic_gamma1 + basic_gamma2) / 2
+    elif gain is None:
+        m = gray.mean((-1, -2), keepdim=True)
+        m_log = m.log()
+        gain = 2 * m * log(0.5) - 4 * gamma_basic * m * m_log
+
     gray = gray.add(1e-8)
     #
     dtype = __default_dtype(gray)
@@ -233,7 +323,10 @@ def local_gamma_correction(
     local_mean = gray_f.mul_(lowpass)
     local_mean = torch.fft.irfft2(local_mean, s=gray.shape[-2:])
     # gamma = local_mean * gain + (basic_gamma - 0.5 * gain)
-    gamma = local_mean.mul_(gain).add_(basic_gamma - 0.5 * gain)
-    gamma.relu_()
+    gamma = local_mean.mul_(gain).add_(gamma_basic - bri_center * gain)
+
+    if gamma_min is None:
+        gamma_min = 0
+    gamma.clip_(gamma_min, gamma_max)
     res = rgb.pow(gamma)
     return res

@@ -1,4 +1,5 @@
 from math import log
+from typing import Literal
 
 import torch
 
@@ -102,6 +103,7 @@ def get_gaussian_lowpass(
 def auto_gamma_correction(
     img: torch.Tensor,
     target: float = 0.5,
+    brightness: Literal['mean', 'max'] = 'mean',
 ):
     """Gamma-correction with the automatically estimated gamma.
 
@@ -115,6 +117,8 @@ def auto_gamma_correction(
         An RGB or grayscale image with shape `(*, C, H, W)`.
     target : float, default=0.5
         Target brightness.
+    brightness: {"mean", "max"}, default="mean"
+        Formula to convert RGB to grayscale.
 
     Returns
     -------
@@ -127,8 +131,14 @@ def auto_gamma_correction(
         of brightness," Advances in Computer Science: an International Journal.
         Vol. 4, Issue 6, No.18 , Nov. 2015.
     """
-    _mean = img.mean((-1, -2, -3), keepdim=True)
-    gamma = log(target) / _mean.log()
+    assert brightness in ('mean', 'max')
+    gray = (
+        img.amax(-3, keepdim=True)
+        if brightness == 'max'
+        else img.mean(-3, keepdim=True)
+    )
+    m = gray.mean((-1, -2), keepdim=True)
+    gamma = log(target) / m.log()
     res = img.pow(gamma)
     return res
 
@@ -137,6 +147,8 @@ def auto_gamma_correction(
 def simple_local_gamma_correction(
     rgb: torch.Tensor,
     sigma_blur: float | None = None,
+    bri_target: float = 0.5,
+    brightness: Literal['mean', 'max'] = 'mean',
 ):
     """Adaptive Gamma-correction based on local brightness.
 
@@ -147,19 +159,26 @@ def simple_local_gamma_correction(
     sigma_blur : int, default=50
         The sigma for Gaussian blurring. Higher value means the stronger
         blurrness.
+    bri_target: float, default=0.5
+        Balanced brightness value.
+    brightness: {"mean", "max"}, default="mean"
+        Formula to convert RGB to grayscale.
 
     Returns
     -------
     torch.Tensor
         Enhanced image with the same shape as input.
     """
+    assert brightness in ('mean', 'max')
     num_ch = rgb.size(-3)
-    if num_ch == 3:
-        gray = rgb.mean(-3, keepdim=True)
-    elif num_ch == 1:
-        gray = rgb
+    if num_ch > 1:
+        gray = (
+            rgb.amax(-3, keepdim=True)
+            if brightness == 'max'
+            else rgb.mean(-3, keepdim=True)
+        )
     else:
-        raise ValueError(f'`rgb` must be 1 or 3 channel: {num_ch}')
+        gray = rgb
     if sigma_blur is None:
         k = min(gray.shape[-2:])
         sigma_blur = 0.3 * (k / 2 - 1) + 0.8
@@ -177,7 +196,7 @@ def simple_local_gamma_correction(
     local_mean = gray_f.mul_(lowpass)
     local_mean = torch.fft.irfft2(local_mean, s=gray.shape[-2:])
     #
-    gamma = log(0.5) / local_mean.add_(1e-8).log_()
+    gamma = log(bri_target) / local_mean.add_(1e-8).log_()
     res = rgb.pow(gamma)
     return res
 
@@ -190,6 +209,7 @@ def local_gamma_correction(
     gamma_min: float | None = None,
     gamma_max: float | None = None,
     bri_center: float = 0.5,
+    brightness: Literal['mean', 'max'] = 'mean',
 ):
     """Adaptive Gamma-correction based on local brightness.
 
@@ -212,19 +232,24 @@ def local_gamma_correction(
         The maximum of gamma.
     bri_center: float, default=0.5
         Threshold value to determine the pixel is bright or is dark.
+    brightness: {"mean", "max"}, default="mean"
+        Formula to convert RGB to grayscale.
 
     Returns
     -------
     torch.Tensor
         Enhanced image with the same shape as input.
     """
+    assert brightness in ('mean', 'max')
     num_ch = rgb.size(-3)
-    if num_ch == 3:
-        gray = rgb.mean(-3, keepdim=True)
-    elif num_ch == 1:
-        gray = rgb
+    if num_ch > 1:
+        gray = (
+            rgb.amax(-3, keepdim=True)
+            if brightness == 'max'
+            else rgb.mean(-3, keepdim=True)
+        )
     else:
-        raise ValueError(f'`rgb` must be 1 or 3 channel: {num_ch}')
+        gray = rgb
     if gamma_basic is None and gain is None:
         m = gray.mean((-1, -2), keepdim=True)
         m_log = m.log()

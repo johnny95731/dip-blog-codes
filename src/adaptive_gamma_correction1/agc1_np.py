@@ -1,4 +1,5 @@
 from math import log
+from typing import Literal
 
 import cv2
 import numpy as np
@@ -74,6 +75,7 @@ def get_gaussian_lowpass(
 def auto_gamma_correction(
     rgb: np.ndarray,
     target: float = 0.5,
+    brightness: Literal['mean', 'max'] = 'mean',
 ):
     """Gamma-correction with the automatically estimated gamma.
 
@@ -87,6 +89,8 @@ def auto_gamma_correction(
         An RGB or grayscale image in the range of [0,1] with shape `(H, W, *)`.
     target : float, default=0.5
         Target brightness.
+    brightness: {"mean", "max"}, default="mean"
+        Formula to convert RGB to grayscale.
 
     Returns
     -------
@@ -99,12 +103,18 @@ def auto_gamma_correction(
         of brightness," Advances in Computer Science: an International Journal.
         Vol. 4, Issue 6, No.18 , Nov. 2015.
     """
+    assert brightness in ('mean', 'max')
     is_int = np.issubdtype(rgb.dtype, np.integer)
     if is_int:
         max = 255 if np.issubdtype(rgb.dtype, np.uint8) else rgb.max()
         rgb = np.divide(rgb, max, dtype=np.float32)
-    _mean = rgb.mean()
-    gamma = (log(target) / np.log(_mean)).item()
+
+    num_ch = 1 if rgb.ndim == 2 else rgb.shape[2]
+    if num_ch > 1 and brightness == 'max':
+        m = rgb.max(2, keepdims=True).mean()
+    else:
+        m = rgb.mean()
+    gamma = (log(target) / np.log(m)).item()
     res = cv2.pow(rgb, gamma)
     return res
 
@@ -113,6 +123,8 @@ def auto_gamma_correction(
 def simple_local_gamma_correction(
     rgb: np.ndarray,
     sigma_blur: float | None = None,
+    bri_target: float = 0.5,
+    brightness: Literal['mean', 'max'] = 'mean',
 ):
     """Adaptive Gamma-correction based on local brightness.
 
@@ -123,24 +135,31 @@ def simple_local_gamma_correction(
     sigma_blur : float | None, default=None
         The sigma for Gaussian blurring. Higher value means the stronger
         blurrness.
+    bri_target: float, default=0.5
+        Balanced brightness value.
+    brightness: {"mean", "max"}, default="mean"
+        Formula to convert RGB to grayscale.
 
     Returns
     -------
     np.ndarray
         Enhanced image in the range of [0,1] with the same shape as input.
     """
+    assert brightness in ('mean', 'max')
     is_int = np.issubdtype(rgb.dtype, np.integer)
     if is_int:
         max = 255 if np.issubdtype(rgb.dtype, np.uint8) else rgb.max()
         rgb = np.divide(rgb, max, dtype=np.float32)
 
     num_ch = 1 if rgb.ndim == 2 else rgb.shape[2]
-    if num_ch == 3:
-        gray = rgb.mean(2, keepdims=True)
-    elif num_ch == 1:
-        gray = rgb
+    if num_ch > 1:
+        gray = (
+            rgb.max(2, keepdims=True)
+            if brightness == 'max'
+            else rgb.mean(2, keepdims=True)
+        )
     else:
-        raise ValueError(f'`rgb` must be 1 or 3 channel: {num_ch}')
+        gray = rgb
     if sigma_blur is None:
         k = min(gray.shape[:2])
         sigma_blur = 0.3 * (k / 2 - 1) + 0.8
@@ -155,7 +174,7 @@ def simple_local_gamma_correction(
     )
     local_mean = gray_f * lowpass
     local_mean = np.fft.irfft2(local_mean, s=gray.shape[:2], axes=(0, 1))
-    gamma = log(0.5) / np.log(local_mean)
+    gamma = log(bri_target) / np.log(local_mean)
     res = np.pow(rgb, gamma)
     return res
 
@@ -169,6 +188,7 @@ def local_gamma_correction(
     gamma_min: float | None = None,
     gamma_max: float | None = None,
     bri_center: float = 0.5,
+    brightness: Literal['mean', 'max'] = 'mean',
 ):
     """Adaptive Gamma-correction based on local brightness.
 
@@ -191,24 +211,29 @@ def local_gamma_correction(
         The maximum of gamma.
     bri_center: float, default=0.5
         Threshold value to determine the pixel is bright or is dark.
+    brightness: {"mean", "max"}, default="mean"
+        Formula to convert RGB to grayscale.
 
     Returns
     -------
     np.ndarray
         Enhanced image in the range of [0,1] with the same shape as input.
     """
+    assert brightness in ('mean', 'max')
     is_int = np.issubdtype(rgb.dtype, np.integer)
     if is_int:
         max = 255 if np.issubdtype(rgb.dtype, np.uint8) else rgb.max()
         rgb = np.divide(rgb, max, dtype=np.float32)
 
     num_ch = 1 if rgb.ndim == 2 else rgb.shape[2]
-    if num_ch == 3:
-        gray = rgb.mean(2, keepdims=True)
-    elif num_ch == 1:
-        gray = rgb
+    if num_ch > 1:
+        gray = (
+            rgb.max(2, keepdims=True)
+            if brightness == 'max'
+            else rgb.mean(2, keepdims=True)
+        )
     else:
-        raise ValueError(f'`rgb` must be 1 or 3 channel: {num_ch}')
+        gray = rgb
     if gamma_basic is None and gain is None:
         m = gray.mean()
         m_log = np.log(m)

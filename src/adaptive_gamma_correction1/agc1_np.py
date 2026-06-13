@@ -252,14 +252,20 @@ def local_gamma_correction(
 
     gray = gray + 1e-8
     #
-    local_mean = cv2.GaussianBlur(gray, (0, 0), sigma_blur, sigma_blur)
+    gray_f = np.fft.rfft2(gray, axes=(0, 1))
+    lowpass = get_gaussian_lowpass(
+        gray_f,
+        sigma_blur,
+        d=1.0,
+        spatial_sigma=True,
+    )
+    local_mean = gray_f * lowpass
+    local_mean = np.fft.irfft2(local_mean, s=gray.shape[:2], axes=(0, 1))
     # gamma = gain * (local_mean - bri_center) + basic_gamma
     gamma = (local_mean * gain) + (gamma_basic - bri_center * gain)
 
     if gamma_min is None:
         gamma_min = 0
     np.clip(gamma, gamma_min, gamma_max)
-    if rgb.ndim == 3:
-        gamma = gamma[..., None]
     res = np.pow(rgb, gamma)
     return res

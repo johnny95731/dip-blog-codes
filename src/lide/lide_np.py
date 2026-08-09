@@ -99,7 +99,7 @@ def modified_lide(
     Parameters
     ----------
     rgb : np.ndarray
-        An RGB or grayscale image with shape `(*, C, H, W)`.
+        An RGB or grayscale image with shape `(H, W, C)` or `(H, W)`.
     radius : int | None, default=51
         The radius of kernel of the mean filter. `None` means computing global
         stats instead of local stats.

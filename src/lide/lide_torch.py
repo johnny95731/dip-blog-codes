@@ -1,10 +1,33 @@
 from typing import Literal
 
+import cv2
 import torch
 from torch.nn import functional as F
 
 
 # Utils
+def box_filter2d(x: torch.Tensor, ksize: int, padding: int):
+    if x.device.type == 'cpu':
+        nparr = x.squeeze(-3).numpy()
+        ksize = (ksize, ksize)
+        if nparr.ndim == 3:  # x.shape == (B, C, H, W)
+            out = [cv2.boxFilter(arr2d, -1, ksize) for arr2d in nparr]
+            out = torch.stack([torch.from_numpy(arr2d) for arr2d in out], dim=0)
+        else:
+            out = cv2.boxFilter(nparr, -1, ksize)
+            out = torch.from_numpy(out)
+        out.unsqueeze_(-3)
+    else:
+        out = F.avg_pool2d(
+            x,
+            ksize,
+            stride=1,
+            padding=padding,
+            count_include_pad=False,
+        )
+    return out
+
+
 def _gaussian_cdf(x: torch.Tensor, mean: torch.Tensor, std: torch.Tensor):
     z_score = (x - mean).div_(std.mul_(2**0.5))
     res = torch.erf_(z_score).add_(1.0).mul_(0.5)
@@ -139,20 +162,8 @@ def modified_lide(
     std, mean = torch.std_mean(gray, dim=(-1, -2), keepdim=True)
     if radius is not None:
         ksize = 2 * radius + 1
-        local_mean = F.avg_pool2d(
-            gray,
-            ksize,
-            stride=1,
-            padding=radius,
-            count_include_pad=False,
-        )
-        sq_mean = F.avg_pool2d(
-            gray.square(),
-            ksize,
-            stride=1,
-            padding=radius,
-            count_include_pad=False,
-        )
+        local_mean = box_filter2d(gray, ksize, radius)
+        sq_mean = box_filter2d(gray.square(), ksize, radius)
         # std(x) = mean(x**2) - mean(x)**2
         local_std = sq_mean.sub_(mean.square())
 

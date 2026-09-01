@@ -266,6 +266,6 @@ def local_gamma_correction(
 
     if gamma_min is None:
         gamma_min = 0
-    np.clip(gamma, gamma_min, gamma_max)
+    np.clip(gamma, gamma_min, gamma_max, out=gamma)
     res = np.pow(rgb, gamma)
     return res

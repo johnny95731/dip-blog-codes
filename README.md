@@ -1,5 +1,5 @@
 個人數位影像處理部落格的程式碼。<br>
 Codes for my digital image processing blog.
 
-HackMD: https://hackmd.io/@johnny95731
-Google Blogger: https://johnny95731.blogspot.com/
+HackMD(中文): https://hackmd.io/@johnny95731<br>
+HackMD(EN): https://hackmd.io/@dip-insight-en
